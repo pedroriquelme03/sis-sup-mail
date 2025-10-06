@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Plus, Search, CreditCard as Edit, Trash2, Mail, User, Briefcase, Building2, Target, CheckCircle, XCircle } from 'lucide-react';
+import { ArrowLeft, Plus, Search, CreditCard as Edit, Trash2, Mail, User, Briefcase, Building2, Target, CheckCircle, XCircle, Download, Upload } from 'lucide-react';
 import { Cliente, Email } from '../types';
 import EmailModal from './EmailModal';
 
@@ -82,6 +82,134 @@ export default function ClienteDetalhes({ clienteId, onBack }: ClienteDetalhesPr
     }
   };
 
+  const exportEmails = () => {
+    if (emails.length === 0) {
+      alert('Não há emails para exportar.');
+      return;
+    }
+
+    const csvContent = [
+      // Cabeçalho
+      ['Email', 'Usuário', 'Cargo', 'Departamento', 'Objetivo', 'Em Uso'].join(','),
+      // Dados
+      ...emails.map(email => [
+        email.email,
+        email.usuario || '',
+        email.cargo || '',
+        email.departamento || '',
+        email.objetivo || '',
+        email.em_uso ? 'Sim' : 'Não'
+      ].map(field => `"${field}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${cliente?.nome || 'cliente'}_emails.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const importEmails = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      alert('Por favor, selecione um arquivo CSV.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      try {
+        const lines = text.split('\n').filter(line => line.trim());
+        if (lines.length < 2) {
+          alert('Arquivo CSV deve ter pelo menos um cabeçalho e uma linha de dados.');
+          return;
+        }
+
+        const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+        const expectedHeaders = ['Email', 'Usuário', 'Cargo', 'Departamento', 'Objetivo', 'Em Uso'];
+        
+        if (!expectedHeaders.every(header => headers.includes(header))) {
+          alert('Cabeçalhos do CSV devem ser: Email, Usuário, Cargo, Departamento, Objetivo, Em Uso');
+          return;
+        }
+
+        const emailsToImport: Partial<Email>[] = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
+          if (values.length >= 6 && values[0]) { // Email é obrigatório
+            emailsToImport.push({
+              email: values[0],
+              usuario: values[1] || '',
+              cargo: values[2] || '',
+              departamento: values[3] || '',
+              objetivo: values[4] || '',
+              em_uso: values[5].toLowerCase() === 'sim' || values[5].toLowerCase() === 'true' || values[5] === '1'
+            });
+          }
+        }
+
+        if (emailsToImport.length === 0) {
+          alert('Nenhum email válido encontrado no arquivo.');
+          return;
+        }
+
+        if (confirm(`Deseja importar ${emailsToImport.length} emails?`)) {
+          importEmailsToDatabase(emailsToImport);
+        }
+      } catch (error) {
+        console.error('Erro ao processar arquivo CSV:', error);
+        alert('Erro ao processar arquivo CSV. Verifique o formato.');
+      }
+    };
+    reader.readAsText(file);
+    
+    // Limpar o input para permitir selecionar o mesmo arquivo novamente
+    event.target.value = '';
+  };
+
+  const importEmailsToDatabase = async (emailsToImport: Partial<Email>[]) => {
+    try {
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const emailData of emailsToImport) {
+        try {
+          const response = await fetch('/api/emails', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...emailData, cliente_id: clienteId })
+          });
+
+          if (response.ok) {
+            successCount++;
+          } else {
+            errorCount++;
+          }
+        } catch (error) {
+          errorCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        loadEmails(); // Recarregar a lista
+        alert(`Importação concluída!\nSucessos: ${successCount}\nErros: ${errorCount}`);
+      } else {
+        alert('Nenhum email foi importado. Verifique os dados.');
+      }
+    } catch (error) {
+      console.error('Erro na importação:', error);
+      alert('Erro durante a importação.');
+    }
+  };
+
   const handleSave = () => {
     setModalOpen(false);
     setEditingEmail(null);
@@ -153,16 +281,36 @@ export default function ClienteDetalhes({ clienteId, onBack }: ClienteDetalhesPr
       <div className="bg-white rounded-xl shadow-md p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">E-mails Gerenciados</h2>
-          <button
-            onClick={() => {
-              setEditingEmail(null);
-              setModalOpen(true);
-            }}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            Adicionar E-mail
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={exportEmails}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center gap-2"
+              title="Exportar emails para CSV"
+            >
+              <Download className="w-5 h-5" />
+              Exportar
+            </button>
+            <label className="bg-orange-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-orange-700 transition-colors flex items-center gap-2 cursor-pointer">
+              <Upload className="w-5 h-5" />
+              Importar
+              <input
+                type="file"
+                accept=".csv"
+                onChange={importEmails}
+                className="hidden"
+              />
+            </label>
+            <button
+              onClick={() => {
+                setEditingEmail(null);
+                setModalOpen(true);
+              }}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Adicionar E-mail
+            </button>
+          </div>
         </div>
 
         <div className="mb-6">
