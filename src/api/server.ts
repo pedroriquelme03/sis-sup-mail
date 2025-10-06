@@ -6,9 +6,17 @@ import type { RowDataPacket, ResultSetHeader } from 'mysql2';
 const app = express();
 app.use(express.json());
 
-await initDatabase();
+// Inicializar banco apenas uma vez
+let dbInitialized = false;
+const initializeDb = async () => {
+  if (!dbInitialized) {
+    await initDatabase();
+    dbInitialized = true;
+  }
+};
 
 app.post('/api/login', async (req, res) => {
+  await initializeDb();
   const { email, senha } = req.body;
 
   try {
@@ -41,6 +49,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.post('/api/usuarios', async (req, res) => {
+  await initializeDb();
   const { nome, email, senha } = req.body;
 
   try {
@@ -68,6 +77,7 @@ app.post('/api/usuarios', async (req, res) => {
 });
 
 app.get('/api/dashboard/stats', async (req, res) => {
+  await initializeDb();
   try {
     const [totalClientes] = await pool.query<RowDataPacket[]>('SELECT COUNT(*) as count FROM clientes');
 
@@ -95,6 +105,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
 });
 
 app.get('/api/clientes', async (req, res) => {
+  await initializeDb();
   try {
     const [clientes] = await pool.query<RowDataPacket[]>('SELECT * FROM clientes ORDER BY nome');
     res.json(clientes);
@@ -104,6 +115,7 @@ app.get('/api/clientes', async (req, res) => {
 });
 
 app.get('/api/clientes/:id', async (req, res) => {
+  await initializeDb();
   try {
     const [clientes] = await pool.query<RowDataPacket[]>('SELECT * FROM clientes WHERE id = ?', [req.params.id]);
     if (clientes.length > 0) {
@@ -117,6 +129,7 @@ app.get('/api/clientes/:id', async (req, res) => {
 });
 
 app.get('/api/clientes/slug/:slug', async (req, res) => {
+  await initializeDb();
   try {
     const [clientes] = await pool.query<RowDataPacket[]>('SELECT * FROM clientes WHERE url_slug = ?', [req.params.slug]);
     if (clientes.length > 0) {
@@ -130,6 +143,7 @@ app.get('/api/clientes/slug/:slug', async (req, res) => {
 });
 
 app.post('/api/clientes', async (req, res) => {
+  await initializeDb();
   const { nome, cnpj, contato_nome, contato_email, contato_telefone, observacoes, valor_mensalidade, url_slug } = req.body;
 
   try {
@@ -144,6 +158,7 @@ app.post('/api/clientes', async (req, res) => {
 });
 
 app.put('/api/clientes/:id', async (req, res) => {
+  await initializeDb();
   const { nome, cnpj, contato_nome, contato_email, contato_telefone, observacoes, valor_mensalidade, url_slug } = req.body;
 
   try {
@@ -158,6 +173,7 @@ app.put('/api/clientes/:id', async (req, res) => {
 });
 
 app.delete('/api/clientes/:id', async (req, res) => {
+  await initializeDb();
   try {
     await pool.query('DELETE FROM clientes WHERE id = ?', [req.params.id]);
     res.json({ success: true });
@@ -167,6 +183,7 @@ app.delete('/api/clientes/:id', async (req, res) => {
 });
 
 app.get('/api/clientes/:id/emails', async (req, res) => {
+  await initializeDb();
   try {
     const [emails] = await pool.query<RowDataPacket[]>('SELECT * FROM emails WHERE cliente_id = ? ORDER BY email', [req.params.id]);
     res.json(emails);
@@ -176,6 +193,7 @@ app.get('/api/clientes/:id/emails', async (req, res) => {
 });
 
 app.post('/api/emails', async (req, res) => {
+  await initializeDb();
   const { cliente_id, email, usuario, cargo, departamento, objetivo, em_uso } = req.body;
 
   try {
@@ -190,6 +208,7 @@ app.post('/api/emails', async (req, res) => {
 });
 
 app.put('/api/emails/:id', async (req, res) => {
+  await initializeDb();
   const { email, usuario, cargo, departamento, objetivo, em_uso } = req.body;
 
   try {
@@ -204,6 +223,7 @@ app.put('/api/emails/:id', async (req, res) => {
 });
 
 app.delete('/api/emails/:id', async (req, res) => {
+  await initializeDb();
   try {
     await pool.query('DELETE FROM emails WHERE id = ?', [req.params.id]);
     res.json({ success: true });
@@ -213,6 +233,7 @@ app.delete('/api/emails/:id', async (req, res) => {
 });
 
 app.get('/api/suportes', async (req, res) => {
+  await initializeDb();
   try {
     const [suportes] = await pool.query<RowDataPacket[]>(
       'SELECT s.*, c.nome as cliente_nome FROM suportes s LEFT JOIN clientes c ON s.cliente_id = c.id ORDER BY s.data_suporte DESC'
@@ -224,6 +245,7 @@ app.get('/api/suportes', async (req, res) => {
 });
 
 app.post('/api/suportes', async (req, res) => {
+  await initializeDb();
   const { cliente_id, tecnico, tipo, descricao, print_url, status } = req.body;
 
   try {
@@ -238,6 +260,7 @@ app.post('/api/suportes', async (req, res) => {
 });
 
 app.post('/api/suportes/solicitar', async (req, res) => {
+  await initializeDb();
   const { cliente_id, solicitante_nome, solicitante_email, solicitante_departamento, tipo, descricao, print_url } = req.body;
 
   try {
@@ -251,9 +274,12 @@ app.post('/api/suportes/solicitar', async (req, res) => {
   }
 });
 
-const PORT = 3001;
-app.listen(PORT, () => {
-  console.log(`API rodando na porta ${PORT}`);
-});
+// Para desenvolvimento local
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = 3001;
+  app.listen(PORT, () => {
+    console.log(`API rodando na porta ${PORT}`);
+  });
+}
 
 export default app;
