@@ -1,4 +1,5 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import pool, { initDatabase } from '../lib/database';
 import type { RowDataPacket, ResultSetHeader } from 'mysql2';
 
@@ -12,16 +13,29 @@ app.post('/api/login', async (req, res) => {
 
   try {
     const [users] = await pool.query<RowDataPacket[]>(
-      'SELECT id, nome, email, tipo_usuario FROM usuarios WHERE email = ? AND senha_hash = ?',
-      [email, senha]
+      'SELECT id, nome, email, senha_hash, tipo_usuario FROM usuarios WHERE email = ?',
+      [email]
     );
 
     if (users.length > 0) {
-      res.json(users[0]);
+      const user = users[0];
+      const senhaValida = await bcrypt.compare(senha, user.senha_hash);
+      
+      if (senhaValida) {
+        res.json({
+          id: user.id,
+          nome: user.nome,
+          email: user.email,
+          tipo_usuario: user.tipo_usuario
+        });
+      } else {
+        res.status(401).json({ error: 'Credenciais inválidas' });
+      }
     } else {
       res.status(401).json({ error: 'Credenciais inválidas' });
     }
   } catch (error) {
+    console.error('Erro no login:', error);
     res.status(500).json({ error: 'Erro ao fazer login' });
   }
 });
@@ -39,13 +53,16 @@ app.post('/api/usuarios', async (req, res) => {
       return res.status(400).json({ error: 'E-mail já cadastrado' });
     }
 
+    const senhaHash = await bcrypt.hash(senha, 10);
+
     const [result] = await pool.query<ResultSetHeader>(
       'INSERT INTO usuarios (nome, email, senha_hash, tipo_usuario) VALUES (?, ?, ?, ?)',
-      [nome, email, senha, 'tecnico']
+      [nome, email, senhaHash, 'tecnico']
     );
 
     res.json({ id: result.insertId, nome, email, tipo_usuario: 'tecnico' });
   } catch (error) {
+    console.error('Erro ao criar usuário:', error);
     res.status(500).json({ error: 'Erro ao criar usuário' });
   }
 });

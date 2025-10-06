@@ -1,4 +1,5 @@
 import mysql from 'mysql2/promise';
+import bcrypt from 'bcryptjs';
 
 const pool = mysql.createPool({
   host: '186.209.113.99',
@@ -76,10 +77,11 @@ export async function initDatabase() {
 
     const [users] = await connection.query('SELECT COUNT(*) as count FROM usuarios');
     if ((users as any)[0].count === 0) {
+      const senhaHash = await bcrypt.hash('admin123', 10);
       await connection.query(`
         INSERT INTO usuarios (nome, email, senha_hash, cargo, tipo_usuario)
-        VALUES ('Administrador', 'admin@sistema.com', 'admin123', 'Administrador', 'admin')
-      `);
+        VALUES ('Administrador', 'admin@sistema.com', ?, 'Administrador', 'admin')
+      `, [senhaHash]);
     }
 
   } finally {
