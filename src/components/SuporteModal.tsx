@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Upload, Image as ImageIcon } from 'lucide-react';
 import { Cliente } from '../types';
 
 interface SuporteModalProps {
@@ -18,6 +18,8 @@ export default function SuporteModal({ onClose, onSave }: SuporteModalProps) {
     status: 'aberto'
   });
   const [loading, setLoading] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   useEffect(() => {
     loadClientes();
@@ -60,6 +62,29 @@ export default function SuporteModal({ onClose, onSave }: SuporteModalProps) {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Verificar se é uma imagem
+      if (file.type.startsWith('image/')) {
+        setImageFile(file);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setImagePreview(e.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        alert('Por favor, selecione apenas arquivos de imagem.');
+      }
+    }
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    setFormData(prev => ({ ...prev, print_url: '' }));
   };
 
   return (
@@ -149,16 +174,56 @@ export default function SuporteModal({ onClose, onSave }: SuporteModalProps) {
 
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                URL do Print (opcional)
+                Imagem do Print (opcional)
               </label>
-              <input
-                type="url"
-                name="print_url"
-                value={formData.print_url}
-                onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="https://exemplo.com/imagem.png"
-              />
+              
+              {!imagePreview ? (
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="hidden"
+                    id="image-upload"
+                  />
+                  <label
+                    htmlFor="image-upload"
+                    className="cursor-pointer flex flex-col items-center space-y-2"
+                  >
+                    <Upload className="w-8 h-8 text-gray-400" />
+                    <span className="text-sm text-gray-600">
+                      Clique para fazer upload de uma imagem
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      PNG, JPG, GIF até 10MB
+                    </span>
+                  </label>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="relative">
+                    <img
+                      src={imagePreview}
+                      alt="Preview"
+                      className="w-full h-48 object-contain border border-gray-300 rounded-lg bg-gray-50"
+                    />
+                    <button
+                      type="button"
+                      onClick={removeImage}
+                      className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex items-center space-x-2 text-sm text-gray-600">
+                    <ImageIcon className="w-4 h-4" />
+                    <span>{imageFile?.name}</span>
+                    <span className="text-gray-400">
+                      ({(imageFile?.size ? (imageFile.size / 1024 / 1024).toFixed(2) : '0')} MB)
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="md:col-span-2">
