@@ -21,7 +21,8 @@ export default function SolicitacaoPublica({ slug }: SolicitacaoPublicaProps) {
     solicitante_departamento: '',
     tipo: '',
     descricao: '',
-    print_url: ''
+    print_url: '',
+    print_base64: ''
   });
 
   useEffect(() => {
@@ -92,7 +93,9 @@ export default function SolicitacaoPublica({ slug }: SolicitacaoPublicaProps) {
         setImageFile(file);
         const reader = new FileReader();
         reader.onload = (e) => {
-          setImagePreview(e.target?.result as string);
+          const base64 = e.target?.result as string;
+          setImagePreview(base64);
+          setFormData(prev => ({ ...prev, print_base64: base64 }));
         };
         reader.readAsDataURL(file);
       } else {
@@ -104,7 +107,7 @@ export default function SolicitacaoPublica({ slug }: SolicitacaoPublicaProps) {
   const removeImage = () => {
     setImageFile(null);
     setImagePreview(null);
-    setFormData(prev => ({ ...prev, print_url: '' }));
+    setFormData(prev => ({ ...prev, print_url: '', print_base64: '' }));
   };
 
   if (loading) {

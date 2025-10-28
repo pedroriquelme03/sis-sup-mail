@@ -15,6 +15,7 @@ export default function SuporteModal({ onClose, onSave }: SuporteModalProps) {
     tipo: '',
     descricao: '',
     print_url: '',
+    print_base64: '',
     status: 'aberto'
   });
   const [loading, setLoading] = useState(false);
@@ -72,7 +73,9 @@ export default function SuporteModal({ onClose, onSave }: SuporteModalProps) {
         setImageFile(file);
         const reader = new FileReader();
         reader.onload = (e) => {
-          setImagePreview(e.target?.result as string);
+          const base64 = e.target?.result as string;
+          setImagePreview(base64);
+          setFormData(prev => ({ ...prev, print_base64: base64 }));
         };
         reader.readAsDataURL(file);
       } else {
@@ -84,7 +87,7 @@ export default function SuporteModal({ onClose, onSave }: SuporteModalProps) {
   const removeImage = () => {
     setImageFile(null);
     setImagePreview(null);
-    setFormData(prev => ({ ...prev, print_url: '' }));
+    setFormData(prev => ({ ...prev, print_url: '', print_base64: '' }));
   };
 
   return (

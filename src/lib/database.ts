@@ -1,91 +1,92 @@
-import mysql from 'mysql2/promise';
+import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
 
-const pool = mysql.createPool({
-  host: '186.209.113.99',
-  user: 'pedroriq_sissuporte',
-  password: '$6OQyScs6yxUVEkw',
-  database: 'pedroriq_sissuporte',
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
+const DATABASE_URL = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
+const TIMEZONE = process.env.TZ || 'America/Sao_Paulo';
+
+if (!DATABASE_URL) {
+  console.warn('SUPABASE_DB_URL não definido. Configure as variáveis de ambiente para conectar ao Postgres.');
+}
+
+export const pool = new Pool({
+  connectionString: DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
 });
 
 export async function initDatabase() {
-  const connection = await pool.getConnection();
-
+  const client = await pool.connect();
   try {
-    await connection.query(`
+    await client.query(`SET TIME ZONE '${TIMEZONE}'`);
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS usuarios (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        nome VARCHAR(255) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        senha_hash VARCHAR(255) NOT NULL,
-        cargo VARCHAR(100),
-        tipo_usuario ENUM('admin', 'tecnico') DEFAULT 'tecnico',
-        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        id SERIAL PRIMARY KEY,
+        nome TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        senha_hash TEXT NOT NULL,
+        cargo TEXT,
+        tipo_usuario TEXT CHECK (tipo_usuario IN ('admin','tecnico')) DEFAULT 'tecnico',
+        criado_em TIMESTAMPTZ DEFAULT NOW()
       )
     `);
 
-    await connection.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS clientes (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        nome VARCHAR(255) NOT NULL,
-        cnpj VARCHAR(18),
-        contato_nome VARCHAR(255),
-        contato_email VARCHAR(255),
-        contato_telefone VARCHAR(20),
+        id SERIAL PRIMARY KEY,
+        nome TEXT NOT NULL,
+        cnpj TEXT,
+        contato_nome TEXT,
+        contato_email TEXT,
+        contato_telefone TEXT,
         observacoes TEXT,
-        valor_mensalidade DECIMAL(10,2),
-        url_slug VARCHAR(100) UNIQUE,
-        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        valor_mensalidade NUMERIC(10,2),
+        url_slug TEXT UNIQUE,
+        criado_em TIMESTAMPTZ DEFAULT NOW()
       )
     `);
 
-    await connection.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS emails (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        cliente_id INT NOT NULL,
-        email VARCHAR(255) NOT NULL,
-        usuario VARCHAR(255),
-        cargo VARCHAR(100),
-        departamento VARCHAR(100),
+        id SERIAL PRIMARY KEY,
+        cliente_id INT NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+        email TEXT NOT NULL,
+        usuario TEXT,
+        cargo TEXT,
+        departamento TEXT,
         objetivo TEXT,
-        em_uso BOOLEAN DEFAULT true,
-        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
+        em_uso BOOLEAN DEFAULT TRUE,
+        criado_em TIMESTAMPTZ DEFAULT NOW()
       )
     `);
 
-    await connection.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS suportes (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        cliente_id INT NOT NULL,
-        tecnico VARCHAR(255),
-        tipo VARCHAR(100),
+        id SERIAL PRIMARY KEY,
+        cliente_id INT NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+        tecnico TEXT,
+        tipo TEXT,
         descricao TEXT,
-        print_url VARCHAR(500),
-        data_suporte TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        print_url TEXT,
+        data_suporte TIMESTAMPTZ DEFAULT NOW(),
         tempo_gasto INT,
-        solicitante_nome VARCHAR(255),
-        solicitante_email VARCHAR(255),
-        solicitante_departamento VARCHAR(100),
-        status ENUM('aberto', 'em_andamento', 'resolvido', 'fechado') DEFAULT 'aberto',
-        FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
+        solicitante_nome TEXT,
+        solicitante_email TEXT,
+        solicitante_departamento TEXT,
+        status TEXT CHECK (status IN ('aberto','em_andamento','resolvido','fechado')) DEFAULT 'aberto'
       )
     `);
 
-    const [users] = await connection.query('SELECT COUNT(*) as count FROM usuarios');
-    if ((users as any)[0].count === 0) {
+    const countResult = await client.query(`SELECT COUNT(*)::int AS count FROM usuarios`);
+    if ((countResult.rows[0]?.count ?? 0) === 0) {
       const senhaHash = await bcrypt.hash('admin123', 10);
-      await connection.query(`
-        INSERT INTO usuarios (nome, email, senha_hash, cargo, tipo_usuario)
-        VALUES ('Administrador', 'admin@sistema.com', ?, 'Administrador', 'admin')
-      `, [senhaHash]);
+      await client.query(
+        `INSERT INTO usuarios (nome, email, senha_hash, cargo, tipo_usuario)
+         VALUES ('Administrador', 'admin@sistema.com', $1, 'Administrador', 'admin')`,
+        [senhaHash]
+      );
     }
-
   } finally {
-    connection.release();
+    client.release();
   }
 }
 
