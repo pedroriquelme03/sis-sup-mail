@@ -1,6 +1,6 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import { supabase as sb } from '../lib/supabase';
+import { supabase as sb } from '../lib/supabase.js';
 
 const app = express();
 app.use(express.json());
