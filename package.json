@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "api": "tsx watch src/api/server.ts",
-    "vercel-build": "vite build"
+    "vercel-build": "vite build",
+    "test:supabase": "tsx scripts/test-supabase.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",

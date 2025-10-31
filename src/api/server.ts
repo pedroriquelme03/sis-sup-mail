@@ -272,6 +272,16 @@ app.get('/api/suportes', async (_req, res) => {
   }
 });
 
+app.get('/api/health/supabase', async (_req, res) => {
+  try {
+    const resp = await sb.from('clientes').select('*', { count: 'exact', head: true });
+    if (resp.error) throw resp.error;
+    return res.json({ ok: true, table: 'clientes', count: resp.count ?? 0 });
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, error: error?.message || String(error) });
+  }
+});
+
 app.post('/api/suportes', async (req, res) => {
   await initializeDb();
   const { cliente_id, tecnico, tipo, descricao, print_url, status, print_base64 } = req.body;
