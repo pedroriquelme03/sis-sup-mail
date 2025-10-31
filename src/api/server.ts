@@ -68,6 +68,68 @@ app.post('/api/usuarios', async (req, res) => {
   }
 });
 
+// Atualizar perfil (nome e email)
+app.put('/api/usuarios/:id', async (req, res) => {
+  await initializeDb();
+  const { nome, email } = req.body as { nome: string; email: string };
+  const { id } = req.params;
+
+  try {
+    // Verificar e-mail já usado por outro usuário
+    const { data: existing, error: exErr } = await sb
+      .from('usuarios')
+      .select('id')
+      .eq('email', email)
+      .neq('id', id)
+      .maybeSingle();
+    if (exErr) throw exErr;
+    if (existing) return res.status(400).json({ error: 'E-mail já cadastrado por outro usuário' });
+
+    const { error } = await sb
+      .from('usuarios')
+      .update({ nome, email })
+      .eq('id', id);
+    if (error) throw error;
+
+    res.json({ id, nome, email });
+  } catch (error) {
+    console.error('Erro ao atualizar perfil:', error);
+    res.status(500).json({ error: 'Erro ao atualizar perfil' });
+  }
+});
+
+// Alterar senha (requer senha atual)
+app.put('/api/usuarios/:id/senha', async (req, res) => {
+  await initializeDb();
+  const { id } = req.params;
+  const { senha_atual, nova_senha } = req.body as { senha_atual: string; nova_senha: string };
+
+  try {
+    const { data: user, error } = await sb
+      .from('usuarios')
+      .select('id, senha_hash')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    const ok = await bcrypt.compare(senha_atual, (user as any).senha_hash);
+    if (!ok) return res.status(401).json({ error: 'Senha atual incorreta' });
+
+    const novaHash = await bcrypt.hash(nova_senha, 10);
+    const upd = await sb
+      .from('usuarios')
+      .update({ senha_hash: novaHash })
+      .eq('id', id);
+    if (upd.error) throw upd.error;
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao trocar senha:', error);
+    res.status(500).json({ error: 'Erro ao trocar senha' });
+  }
+});
+
 app.get('/api/dashboard/stats', async (_req, res) => {
   await initializeDb();
   try {
