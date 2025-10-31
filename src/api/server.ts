@@ -1,47 +1,36 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import pool, { initDatabase } from '../lib/database';
-import supabase from '../lib/supabase';
+import { supabase as sb } from '../lib/supabase';
 
 const app = express();
 app.use(express.json());
 
 // Inicializar banco apenas uma vez
-let dbInitialized = false;
-const initializeDb = async () => {
-  if (!dbInitialized) {
-    await initDatabase();
-    dbInitialized = true;
-  }
-};
+const initializeDb = async () => {};
 
 app.post('/api/login', async (req, res) => {
   await initializeDb();
   const { email, senha } = req.body;
 
   try {
-    const { rows } = await pool.query(
-      'SELECT id, nome, email, senha_hash, tipo_usuario FROM usuarios WHERE email = $1',
-      [email]
-    );
+    const { data: user, error } = await sb
+      .from('usuarios')
+      .select('id, nome, email, senha_hash, tipo_usuario')
+      .eq('email', email)
+      .maybeSingle();
 
-    if (rows.length > 0) {
-      const user = rows[0] as any;
-      const senhaValida = await bcrypt.compare(senha, user.senha_hash);
-      
-      if (senhaValida) {
-        res.json({
-          id: user.id,
-          nome: user.nome,
-          email: user.email,
-          tipo_usuario: user.tipo_usuario
-        });
-      } else {
-        res.status(401).json({ error: 'Credenciais inválidas' });
-      }
-    } else {
-      res.status(401).json({ error: 'Credenciais inválidas' });
-    }
+    if (error) throw error;
+    if (!user) return res.status(401).json({ error: 'Credenciais inválidas' });
+
+    const senhaValida = await bcrypt.compare(senha, user.senha_hash);
+    if (!senhaValida) return res.status(401).json({ error: 'Credenciais inválidas' });
+
+    res.json({
+      id: user.id,
+      nome: user.nome,
+      email: user.email,
+      tipo_usuario: user.tipo_usuario
+    });
   } catch (error) {
     console.error('Erro no login:', error);
     res.status(500).json({ error: 'Erro ao fazer login' });
@@ -53,69 +42,93 @@ app.post('/api/usuarios', async (req, res) => {
   const { nome, email, senha } = req.body;
 
   try {
-    const existing = await pool.query(
-      'SELECT id FROM usuarios WHERE email = $1',
-      [email]
-    );
-
-    if ((existing.rows || []).length > 0) {
+    const { data: existing, error: exErr } = await sb
+      .from('usuarios')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+    if (exErr) throw exErr;
+    if (existing) {
       return res.status(400).json({ error: 'E-mail já cadastrado' });
     }
 
     const senhaHash = await bcrypt.hash(senha, 10);
 
-    const result = await pool.query(
-      'INSERT INTO usuarios (nome, email, senha_hash, tipo_usuario) VALUES ($1, $2, $3, $4) RETURNING id',
-      [nome, email, senhaHash, 'tecnico']
-    );
+    const { data, error } = await sb
+      .from('usuarios')
+      .insert([{ nome, email, senha_hash: senhaHash, tipo_usuario: 'tecnico' }])
+      .select('id')
+      .single();
+    if (error) throw error;
 
-    res.json({ id: result.rows[0].id, nome, email, tipo_usuario: 'tecnico' });
+    res.json({ id: data.id, nome, email, tipo_usuario: 'tecnico' });
   } catch (error) {
     console.error('Erro ao criar usuário:', error);
     res.status(500).json({ error: 'Erro ao criar usuário' });
   }
 });
 
-app.get('/api/dashboard/stats', async (req, res) => {
+app.get('/api/dashboard/stats', async (_req, res) => {
   await initializeDb();
   try {
-    const totalClientes = await pool.query('SELECT COUNT(*)::int as count FROM clientes');
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0));
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0));
+    const startIso = start.toISOString();
+    const endIso = end.toISOString();
 
-    const suportesMes = await pool.query(
-      `SELECT COUNT(*)::int as count
-       FROM suportes
-       WHERE date_trunc('month', data_suporte) = date_trunc('month', NOW())`
-    );
+    const totalClientesQ = sb.from('clientes').select('*', { count: 'exact', head: true });
+    const suportesMesQ = sb
+      .from('suportes')
+      .select('*', { count: 'exact', head: true })
+      .gte('data_suporte', startIso)
+      .lt('data_suporte', endIso);
+    const clientesAtivosQ = sb
+      .from('suportes')
+      .select('cliente_id')
+      .gte('data_suporte', startIso)
+      .lt('data_suporte', endIso);
+    const tiposSuporteQ = sb.from('suportes').select('tipo');
 
-    const clientesAtivos = await pool.query(
-      `SELECT COUNT(DISTINCT cliente_id)::int as count
-       FROM suportes
-       WHERE date_trunc('month', data_suporte) = date_trunc('month', NOW())`
-    );
+    const [totalClientesR, suportesMesR, clientesAtivosR, tiposSuporteR] = await Promise.all([
+      totalClientesQ,
+      suportesMesQ,
+      clientesAtivosQ,
+      tiposSuporteQ
+    ]);
 
-    const tiposSuporte = await pool.query(
-      `SELECT tipo, COUNT(*)::int as total
-       FROM suportes
-       GROUP BY tipo
-       ORDER BY total DESC`
-    );
+    if (totalClientesR.error) throw totalClientesR.error;
+    if (suportesMesR.error) throw suportesMesR.error;
+    if (clientesAtivosR.error) throw clientesAtivosR.error;
+    if (tiposSuporteR.error) throw tiposSuporteR.error;
+
+    const clientesAtivosCount = new Set((clientesAtivosR.data || []).map((r: any) => r.cliente_id)).size;
+    const tiposCountMap = new Map<string, number>();
+    (tiposSuporteR.data || []).forEach((r: any) => {
+      const t = r.tipo || 'não_especificado';
+      tiposCountMap.set(t, (tiposCountMap.get(t) || 0) + 1);
+    });
+    const tiposSuporte = Array.from(tiposCountMap.entries())
+      .map(([tipo, total]) => ({ tipo, total }))
+      .sort((a, b) => b.total - a.total);
 
     res.json({
-      totalClientes: totalClientes.rows[0].count,
-      suportesMes: suportesMes.rows[0].count,
-      clientesAtivos: clientesAtivos.rows[0].count,
-      tiposSuporte: tiposSuporte.rows
+      totalClientes: totalClientesR.count || 0,
+      suportesMes: suportesMesR.count || 0,
+      clientesAtivos: clientesAtivosCount,
+      tiposSuporte
     });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao carregar estatísticas' });
   }
 });
 
-app.get('/api/clientes', async (req, res) => {
+app.get('/api/clientes', async (_req, res) => {
   await initializeDb();
   try {
-    const clientes = await pool.query('SELECT * FROM clientes ORDER BY nome');
-    res.json(clientes.rows);
+    const { data, error } = await sb.from('clientes').select('*').order('nome', { ascending: true });
+    if (error) throw error;
+    res.json(data || []);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao carregar clientes' });
   }
@@ -124,12 +137,10 @@ app.get('/api/clientes', async (req, res) => {
 app.get('/api/clientes/:id', async (req, res) => {
   await initializeDb();
   try {
-    const clientes = await pool.query('SELECT * FROM clientes WHERE id = $1', [req.params.id]);
-    if (clientes.rows.length > 0) {
-      res.json(clientes.rows[0]);
-    } else {
-      res.status(404).json({ error: 'Cliente não encontrado' });
-    }
+    const { data, error } = await sb.from('clientes').select('*').eq('id', req.params.id).maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Cliente não encontrado' });
+    res.json(data);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao carregar cliente' });
   }
@@ -138,12 +149,10 @@ app.get('/api/clientes/:id', async (req, res) => {
 app.get('/api/clientes/slug/:slug', async (req, res) => {
   await initializeDb();
   try {
-    const clientes = await pool.query('SELECT * FROM clientes WHERE url_slug = $1', [req.params.slug]);
-    if (clientes.rows.length > 0) {
-      res.json(clientes.rows[0]);
-    } else {
-      res.status(404).json({ error: 'Cliente não encontrado' });
-    }
+    const { data, error } = await sb.from('clientes').select('*').eq('url_slug', req.params.slug).maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Cliente não encontrado' });
+    res.json(data);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao carregar cliente' });
   }
@@ -154,11 +163,13 @@ app.post('/api/clientes', async (req, res) => {
   const { nome, cnpj, contato_nome, contato_email, contato_telefone, observacoes, valor_mensalidade, url_slug } = req.body;
 
   try {
-    const result = await pool.query(
-      'INSERT INTO clientes (nome, cnpj, contato_nome, contato_email, contato_telefone, observacoes, valor_mensalidade, url_slug) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
-      [nome, cnpj, contato_nome, contato_email, contato_telefone, observacoes, valor_mensalidade, url_slug]
-    );
-    res.json({ id: result.rows[0].id, ...req.body });
+    const { data, error } = await sb
+      .from('clientes')
+      .insert([{ nome, cnpj, contato_nome, contato_email, contato_telefone, observacoes, valor_mensalidade, url_slug }])
+      .select('id')
+      .single();
+    if (error) throw error;
+    res.json({ id: data.id, ...req.body });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao criar cliente' });
   }
@@ -169,10 +180,11 @@ app.put('/api/clientes/:id', async (req, res) => {
   const { nome, cnpj, contato_nome, contato_email, contato_telefone, observacoes, valor_mensalidade, url_slug } = req.body;
 
   try {
-    await pool.query(
-      'UPDATE clientes SET nome = $1, cnpj = $2, contato_nome = $3, contato_email = $4, contato_telefone = $5, observacoes = $6, valor_mensalidade = $7, url_slug = $8 WHERE id = $9',
-      [nome, cnpj, contato_nome, contato_email, contato_telefone, observacoes, valor_mensalidade, url_slug, req.params.id]
-    );
+    const { error } = await sb
+      .from('clientes')
+      .update({ nome, cnpj, contato_nome, contato_email, contato_telefone, observacoes, valor_mensalidade, url_slug })
+      .eq('id', req.params.id);
+    if (error) throw error;
     res.json({ id: req.params.id, ...req.body });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao atualizar cliente' });
@@ -182,7 +194,8 @@ app.put('/api/clientes/:id', async (req, res) => {
 app.delete('/api/clientes/:id', async (req, res) => {
   await initializeDb();
   try {
-    await pool.query('DELETE FROM clientes WHERE id = $1', [req.params.id]);
+    const { error } = await sb.from('clientes').delete().eq('id', req.params.id);
+    if (error) throw error;
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao excluir cliente' });
@@ -192,8 +205,9 @@ app.delete('/api/clientes/:id', async (req, res) => {
 app.get('/api/clientes/:id/emails', async (req, res) => {
   await initializeDb();
   try {
-    const emails = await pool.query('SELECT * FROM emails WHERE cliente_id = $1 ORDER BY email', [req.params.id]);
-    res.json(emails.rows);
+    const { data, error } = await sb.from('emails').select('*').eq('cliente_id', req.params.id).order('email');
+    if (error) throw error;
+    res.json(data || []);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao carregar e-mails' });
   }
@@ -204,11 +218,13 @@ app.post('/api/emails', async (req, res) => {
   const { cliente_id, email, usuario, cargo, departamento, objetivo, em_uso } = req.body;
 
   try {
-    const result = await pool.query(
-      'INSERT INTO emails (cliente_id, email, usuario, cargo, departamento, objetivo, em_uso) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
-      [cliente_id, email, usuario, cargo, departamento, objetivo, em_uso]
-    );
-    res.json({ id: result.rows[0].id, ...req.body });
+    const { data, error } = await sb
+      .from('emails')
+      .insert([{ cliente_id, email, usuario, cargo, departamento, objetivo, em_uso }])
+      .select('id')
+      .single();
+    if (error) throw error;
+    res.json({ id: data.id, ...req.body });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao criar e-mail' });
   }
@@ -219,10 +235,11 @@ app.put('/api/emails/:id', async (req, res) => {
   const { email, usuario, cargo, departamento, objetivo, em_uso } = req.body;
 
   try {
-    await pool.query(
-      'UPDATE emails SET email = $1, usuario = $2, cargo = $3, departamento = $4, objetivo = $5, em_uso = $6 WHERE id = $7',
-      [email, usuario, cargo, departamento, objetivo, em_uso, req.params.id]
-    );
+    const { error } = await sb
+      .from('emails')
+      .update({ email, usuario, cargo, departamento, objetivo, em_uso })
+      .eq('id', req.params.id);
+    if (error) throw error;
     res.json({ id: req.params.id, ...req.body });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao atualizar e-mail' });
@@ -232,20 +249,24 @@ app.put('/api/emails/:id', async (req, res) => {
 app.delete('/api/emails/:id', async (req, res) => {
   await initializeDb();
   try {
-    await pool.query('DELETE FROM emails WHERE id = $1', [req.params.id]);
+    const { error } = await sb.from('emails').delete().eq('id', req.params.id);
+    if (error) throw error;
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao excluir e-mail' });
   }
 });
 
-app.get('/api/suportes', async (req, res) => {
+app.get('/api/suportes', async (_req, res) => {
   await initializeDb();
   try {
-    const suportes = await pool.query(
-      'SELECT s.*, c.nome as cliente_nome FROM suportes s LEFT JOIN clientes c ON s.cliente_id = c.id ORDER BY s.data_suporte DESC'
-    );
-    res.json(suportes.rows);
+    const { data, error } = await sb
+      .from('suportes')
+      .select('*, clientes:cliente_id (nome)')
+      .order('data_suporte', { ascending: false });
+    if (error) throw error;
+    const mapped = (data || []).map((s: any) => ({ ...s, cliente_nome: s.clientes?.nome }));
+    res.json(mapped);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao carregar suportes' });
   }
@@ -257,26 +278,28 @@ app.post('/api/suportes', async (req, res) => {
 
   try {
     let finalPrintUrl = print_url;
-    if (!finalPrintUrl && print_base64 && supabase) {
+    if (!finalPrintUrl && print_base64) {
       const fileBuffer = Buffer.from(print_base64.split(',').pop() || '', 'base64');
       const filePath = `prints/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
-      const upload = await supabase.storage.from('prints').upload(filePath, fileBuffer, {
+      const upload = await sb.storage.from('prints').upload(filePath, fileBuffer, {
         contentType: 'image/png',
         upsert: false
       });
       if (upload.error) {
         console.error('Erro upload supabase:', upload.error);
       } else {
-        const { data } = supabase.storage.from('prints').getPublicUrl(filePath);
+        const { data } = sb.storage.from('prints').getPublicUrl(filePath);
         finalPrintUrl = data.publicUrl;
       }
     }
 
-    const result = await pool.query(
-      'INSERT INTO suportes (cliente_id, tecnico, tipo, descricao, print_url, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-      [cliente_id, tecnico, tipo, descricao, finalPrintUrl, status]
-    );
-    res.json({ id: result.rows[0].id, ...req.body });
+    const { data, error } = await sb
+      .from('suportes')
+      .insert([{ cliente_id, tecnico, tipo, descricao, print_url: finalPrintUrl, status }])
+      .select('id')
+      .single();
+    if (error) throw error;
+    res.json({ id: data.id, ...req.body });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao criar suporte' });
   }
@@ -288,26 +311,28 @@ app.post('/api/suportes/solicitar', async (req, res) => {
 
   try {
     let finalPrintUrl = print_url;
-    if (!finalPrintUrl && print_base64 && supabase) {
+    if (!finalPrintUrl && print_base64) {
       const fileBuffer = Buffer.from(print_base64.split(',').pop() || '', 'base64');
       const filePath = `prints/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
-      const upload = await supabase.storage.from('prints').upload(filePath, fileBuffer, {
+      const upload = await sb.storage.from('prints').upload(filePath, fileBuffer, {
         contentType: 'image/png',
         upsert: false
       });
       if (upload.error) {
         console.error('Erro upload supabase:', upload.error);
       } else {
-        const { data } = supabase.storage.from('prints').getPublicUrl(filePath);
+        const { data } = sb.storage.from('prints').getPublicUrl(filePath);
         finalPrintUrl = data.publicUrl;
       }
     }
 
-    const result = await pool.query(
-      'INSERT INTO suportes (cliente_id, solicitante_nome, solicitante_email, solicitante_departamento, tipo, descricao, print_url, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
-      [cliente_id, solicitante_nome, solicitante_email, solicitante_departamento, tipo, descricao, finalPrintUrl, 'aberto']
-    );
-    res.json({ id: result.rows[0].id, success: true });
+    const { data, error } = await sb
+      .from('suportes')
+      .insert([{ cliente_id, solicitante_nome, solicitante_email, solicitante_departamento, tipo, descricao, print_url: finalPrintUrl, status: 'aberto' }])
+      .select('id')
+      .single();
+    if (error) throw error;
+    res.json({ id: data.id, success: true });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao criar solicitação' });
   }
