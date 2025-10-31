@@ -20,6 +20,17 @@ function AppContent() {
 
     if (suporteMatch) {
       setPublicSlug(suporteMatch[1]);
+      return;
+    }
+
+    // Novo formato: dominio.com.br/<slug> na raiz
+    const rootMatch = path.match(/^\/([^\/]+)$/);
+    const internalPages = new Set(['', 'dashboard', 'clientes', 'suportes']);
+    if (rootMatch) {
+      const candidate = rootMatch[1];
+      if (!internalPages.has(candidate)) {
+        setPublicSlug(candidate);
+      }
     }
   }, []);
 

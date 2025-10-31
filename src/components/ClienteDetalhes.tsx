@@ -271,7 +271,7 @@ export default function ClienteDetalhes({ clienteId, onBack }: ClienteDetalhesPr
             {cliente.url_slug && (
               <div>
                 <p className="text-sm text-gray-600">URL de Suporte</p>
-                <p className="text-gray-900 font-medium">/suporte/{cliente.url_slug}</p>
+                <p className="text-gray-900 font-medium">/{cliente.url_slug}</p>
               </div>
             )}
           </div>

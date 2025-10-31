@@ -182,7 +182,7 @@ export default function ClienteModal({ cliente, onClose, onSave }: ClienteModalP
               />
               {formData.url_slug && (
                 <p className="text-xs text-gray-500 mt-1">
-                  URL: /suporte/{formData.url_slug}
+                  URL: /{formData.url_slug}
                 </p>
               )}
             </div>
