@@ -410,6 +410,17 @@ app.post('/api/suportes/solicitar', async (req, res) => {
   }
 });
 
+app.delete('/api/suportes/:id', async (req, res) => {
+  await initializeDb();
+  try {
+    const { error } = await sb.from('suportes').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao excluir suporte' });
+  }
+});
+
 // Para desenvolvimento local
 if (process.env.NODE_ENV !== 'production') {
   const PORT = 3001;

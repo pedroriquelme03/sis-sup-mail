@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Search, Filter, Download, Eye } from 'lucide-react';
+import { Plus, Search, Filter, Download, Eye, Trash2 } from 'lucide-react';
 import { Suporte, Cliente } from '../types';
 import SuporteModal from './SuporteModal';
 import { generateSuportesPDF } from '../utils/pdfGenerator';
@@ -101,6 +101,27 @@ export default function Suportes() {
   const handleSave = () => {
     setModalOpen(false);
     loadSuportes();
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('Tem certeza que deseja excluir este suporte? Esta ação não pode ser desfeita.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/suportes/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao excluir suporte');
+      }
+
+      loadSuportes();
+    } catch (error) {
+      console.error('Erro ao excluir suporte:', error);
+      alert('Erro ao excluir suporte. Tente novamente.');
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -268,13 +289,20 @@ export default function Suportes() {
                     </span>
                   </td>
                   <td className="py-4 px-4">
-                    <div className="flex items-center justify-end">
+                    <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => setViewingSuporte(suporte)}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         title="Ver detalhes"
                       >
                         <Eye className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(suporte.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Excluir suporte"
+                      >
+                        <Trash2 className="w-5 h-5" />
                       </button>
                     </div>
                   </td>
