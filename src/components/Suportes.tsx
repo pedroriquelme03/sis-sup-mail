@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { Plus, Search, Filter, Download, Eye, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Plus, Search, Download, Eye, Trash2, X, Play, CheckCircle } from 'lucide-react';
 import { Suporte, Cliente } from '../types';
 import SuporteModal from './SuporteModal';
 import { generateSuportesPDF } from '../utils/pdfGenerator';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Suportes() {
+  const { user } = useAuth();
   const [suportes, setSuportes] = useState<Suporte[]>([]);
   const [filteredSuportes, setFilteredSuportes] = useState<Suporte[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -122,6 +124,43 @@ export default function Suportes() {
       console.error('Erro ao excluir suporte:', error);
       alert('Erro ao excluir suporte. Tente novamente.');
     }
+  };
+
+  const handleUpdateStatus = async (id: number, newStatus: 'em_andamento' | 'resolvido', tecnico?: string) => {
+    try {
+      const response = await fetch(`/api/suportes/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus, tecnico })
+      });
+
+      if (!response.ok) {
+        throw new Error('Erro ao atualizar status do suporte');
+      }
+
+      const updatedSuporte = await response.json();
+      
+      // Atualizar o suporte visualizado se for o mesmo
+      if (viewingSuporte && viewingSuporte.id === id) {
+        setViewingSuporte(updatedSuporte);
+      }
+
+      loadSuportes();
+    } catch (error) {
+      console.error('Erro ao atualizar status:', error);
+      alert('Erro ao atualizar status do suporte. Tente novamente.');
+    }
+  };
+
+  const handleIniciarAtendimento = () => {
+    if (!viewingSuporte) return;
+    const tecnicoNome = user?.nome || '';
+    handleUpdateStatus(viewingSuporte.id, 'em_andamento', tecnicoNome);
+  };
+
+  const handleFinalizarAtendimento = () => {
+    if (!viewingSuporte) return;
+    handleUpdateStatus(viewingSuporte.id, 'resolvido');
   };
 
   const getStatusColor = (status: string) => {
@@ -330,7 +369,7 @@ export default function Suportes() {
                 onClick={() => setViewingSuporte(null)}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <Search className="w-6 h-6 text-gray-600" />
+                <X className="w-6 h-6 text-gray-600" />
               </button>
             </div>
             <div className="p-6 space-y-4">
@@ -380,6 +419,29 @@ export default function Suportes() {
                   <img src={viewingSuporte.print_url} alt="Print" className="max-w-full rounded-lg border border-gray-300" />
                 </div>
               )}
+              
+              <div className="border-t border-gray-200 pt-4 mt-4">
+                <div className="flex gap-3 justify-end">
+                  {viewingSuporte.status === 'aberto' && (
+                    <button
+                      onClick={handleIniciarAtendimento}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                    >
+                      <Play className="w-4 h-4" />
+                      Iniciar Atendimento
+                    </button>
+                  )}
+                  {viewingSuporte.status === 'em_andamento' && (
+                    <button
+                      onClick={handleFinalizarAtendimento}
+                      className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center gap-2"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Finalizar Atendimento
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

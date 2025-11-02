@@ -410,6 +410,30 @@ app.post('/api/suportes/solicitar', async (req, res) => {
   }
 });
 
+app.put('/api/suportes/:id', async (req, res) => {
+  await initializeDb();
+  const { status, tecnico } = req.body;
+  
+  try {
+    const updateData: any = {};
+    if (status) updateData.status = status;
+    if (tecnico !== undefined) updateData.tecnico = tecnico;
+    
+    const { data, error } = await sb
+      .from('suportes')
+      .update(updateData)
+      .eq('id', req.params.id)
+      .select('*, clientes:cliente_id (nome)')
+      .single();
+    
+    if (error) throw error;
+    const mapped = { ...data, cliente_nome: data.clientes?.nome };
+    res.json(mapped);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao atualizar suporte' });
+  }
+});
+
 app.delete('/api/suportes/:id', async (req, res) => {
   await initializeDb();
   try {
