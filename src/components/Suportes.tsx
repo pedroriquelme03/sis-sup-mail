@@ -293,7 +293,74 @@ export default function Suportes() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Cards Layout - Mobile Only */}
+        <div className="block md:hidden space-y-4">
+          {filteredSuportes.map((suporte) => (
+            <div key={suporte.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-mono font-semibold text-blue-600">#{suporte.id}</span>
+                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(suporte.status)}`}>
+                      {getStatusLabel(suporte.status)}
+                    </span>
+                  </div>
+                  <h3 className="font-medium text-gray-900 text-lg">{suporte.cliente_nome}</h3>
+                </div>
+                <div className="flex items-center gap-2 ml-2">
+                  <button
+                    onClick={() => setViewingSuporte(suporte)}
+                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="Ver detalhes"
+                  >
+                    <Eye className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(suporte.id)}
+                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Excluir suporte"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div>
+                  <span className="text-gray-600 font-medium">Data:</span>
+                  <span className="ml-2 text-gray-900">
+                    {new Date(suporte.data_suporte).toLocaleString('pt-BR', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-600 font-medium">Tipo:</span>
+                  <span className="ml-2 text-gray-900 capitalize">{suporte.tipo}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600 font-medium">Técnico:</span>
+                  <span className="ml-2 text-gray-900">{suporte.tecnico || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600 font-medium">Descrição:</span>
+                  <p className="mt-1 text-gray-900">{suporte.descricao}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+          {filteredSuportes.length === 0 && (
+            <div className="text-center py-12">
+              <p className="text-gray-500">Nenhum suporte encontrado</p>
+            </div>
+          )}
+        </div>
+
+        {/* Table Layout - Desktop Only */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-200">

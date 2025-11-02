@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Search, CreditCard as Edit, Trash2, Eye } from 'lucide-react';
 import { Cliente } from '../types';
 import ClienteModal from './ClienteModal';
@@ -101,7 +101,77 @@ export default function Clientes({ onSelectCliente }: ClientesProps) {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Cards Layout - Mobile Only */}
+        <div className="block md:hidden space-y-4">
+          {filteredClientes.map((cliente) => (
+            <div key={cliente.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex-1">
+                  <h3 className="font-medium text-gray-900 text-lg">{cliente.nome}</h3>
+                  {cliente.observacoes && (
+                    <p className="text-sm text-gray-500 mt-1">{cliente.observacoes}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 ml-2">
+                  <button
+                    onClick={() => onSelectCliente(cliente.id)}
+                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="Ver detalhes"
+                  >
+                    <Eye className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingCliente(cliente);
+                      setModalOpen(true);
+                    }}
+                    className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                    title="Editar"
+                  >
+                    <Edit className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(cliente.id)}
+                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Excluir"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div>
+                  <span className="text-gray-600 font-medium">CNPJ:</span>
+                  <span className="ml-2 text-gray-900">{cliente.cnpj || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600 font-medium">Contato:</span>
+                  <div className="ml-2 mt-1">
+                    <p className="text-gray-900">{cliente.contato_nome || '-'}</p>
+                    <p className="text-gray-500">{cliente.contato_email || '-'}</p>
+                    <p className="text-gray-500">{cliente.contato_telefone || '-'}</p>
+                  </div>
+                </div>
+                <div>
+                  <span className="text-gray-600 font-medium">Mensalidade:</span>
+                  <span className="ml-2 text-gray-900">
+                    {cliente.valor_mensalidade
+                      ? `R$ ${Number(cliente.valor_mensalidade).toFixed(2)}`
+                      : '-'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+          {filteredClientes.length === 0 && (
+            <div className="text-center py-12">
+              <p className="text-gray-500">Nenhum cliente encontrado</p>
+            </div>
+          )}
+        </div>
+
+        {/* Table Layout - Desktop Only */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-200">

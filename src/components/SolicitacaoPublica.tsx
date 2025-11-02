@@ -11,6 +11,7 @@ export default function SolicitacaoPublica({ slug }: SolicitacaoPublicaProps) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [suporteId, setSuporteId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -61,14 +62,19 @@ export default function SolicitacaoPublica({ slug }: SolicitacaoPublicaProps) {
       });
 
       if (response.ok) {
+        const data = await response.json();
+        setSuporteId(data.id);
         setSuccess(true);
+        setImagePreview(null);
+        setImageFile(null);
         setFormData({
           solicitante_nome: '',
           solicitante_email: '',
           solicitante_departamento: '',
           tipo: '',
           descricao: '',
-          print_url: ''
+          print_url: '',
+          print_base64: ''
         });
       } else {
         setError('Erro ao enviar solicitação. Tente novamente.');
@@ -136,11 +142,19 @@ export default function SolicitacaoPublica({ slug }: SolicitacaoPublicaProps) {
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md text-center">
           <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Solicitação Enviada!</h1>
+          {suporteId && (
+            <p className="text-lg font-mono font-semibold text-blue-600 mb-4">
+              ID do Suporte: #{suporteId}
+            </p>
+          )}
           <p className="text-gray-600 mb-6">
             Sua solicitação de suporte foi registrada com sucesso. Nossa equipe entrará em contato em breve.
           </p>
           <button
-            onClick={() => setSuccess(false)}
+            onClick={() => {
+              setSuccess(false);
+              setSuporteId(null);
+            }}
             className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors"
           >
             Fazer Nova Solicitação
