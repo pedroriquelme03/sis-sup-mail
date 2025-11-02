@@ -47,6 +47,7 @@ export function generateSuportesPDF(suportes: Suporte[], filters: ExportFilters)
   yPos += 10;
 
   const tableData = suportes.map(suporte => [
+    `#${suporte.id}`,
     new Date(suporte.data_suporte).toLocaleDateString('pt-BR'),
     suporte.cliente_nome || '-',
     suporte.tipo || '-',
@@ -56,7 +57,7 @@ export function generateSuportesPDF(suportes: Suporte[], filters: ExportFilters)
   ]);
 
   autoTable(doc, {
-    head: [['Data', 'Cliente', 'Tipo', 'Técnico', 'Status', 'Descrição']],
+    head: [['ID', 'Data', 'Cliente', 'Tipo', 'Técnico', 'Status', 'Descrição']],
     body: tableData,
     startY: yPos,
     styles: { fontSize: 8 },

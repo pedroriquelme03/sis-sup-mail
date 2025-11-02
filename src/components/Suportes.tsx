@@ -56,10 +56,14 @@ export default function Suportes() {
     let filtered = [...suportes];
 
     if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      const searchNumber = parseInt(searchTerm);
       filtered = filtered.filter(suporte =>
-        suporte.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        suporte.tecnico?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        suporte.cliente_nome?.toLowerCase().includes(searchTerm.toLowerCase())
+        suporte.descricao.toLowerCase().includes(searchLower) ||
+        suporte.tecnico?.toLowerCase().includes(searchLower) ||
+        suporte.cliente_nome?.toLowerCase().includes(searchLower) ||
+        (searchNumber && suporte.id === searchNumber) ||
+        suporte.id.toString().includes(searchTerm)
       );
     }
 
@@ -213,7 +217,7 @@ export default function Suportes() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
-              placeholder="Buscar por descrição, técnico ou cliente..."
+              placeholder="Buscar por ID, descrição, técnico ou cliente..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -293,6 +297,7 @@ export default function Suportes() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-200">
+                <th className="text-left py-3 px-4 text-gray-700 font-semibold">ID</th>
                 <th className="text-left py-3 px-4 text-gray-700 font-semibold">Data</th>
                 <th className="text-left py-3 px-4 text-gray-700 font-semibold">Cliente</th>
                 <th className="text-left py-3 px-4 text-gray-700 font-semibold">Tipo</th>
@@ -305,6 +310,7 @@ export default function Suportes() {
             <tbody>
               {filteredSuportes.map((suporte) => (
                 <tr key={suporte.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-4 px-4 text-gray-700 font-mono font-semibold">#{suporte.id}</td>
                   <td className="py-4 px-4 text-gray-700">
                     {new Date(suporte.data_suporte).toLocaleString('pt-BR', {
                       day: '2-digit',
@@ -373,6 +379,10 @@ export default function Suportes() {
               </button>
             </div>
             <div className="p-6 space-y-4">
+              <div>
+                <p className="text-sm text-gray-600">ID do Suporte</p>
+                <p className="text-lg font-mono font-semibold text-gray-900">#{viewingSuporte.id}</p>
+              </div>
               <div>
                 <p className="text-sm text-gray-600">Cliente</p>
                 <p className="text-lg font-semibold text-gray-900">{viewingSuporte.cliente_nome}</p>
